@@ -1,43 +1,34 @@
-/**
- * Image Compressor — compressor.js
- */
-
 (function () {
     'use strict';
 
-    /* ========================================================
-       Constants & State
-    ======================================================== */
     const MAX_FILES = 10;
-    const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-    const MAX_DIMENSION = 4096; // px — cap either axis to avoid canvas OOM on huge images
+    const MAX_SIZE_BYTES = 10 * 1024 * 1024;
+    const MAX_DIMENSION = 4096;
+    const PROXY_MAX_DIM = 640;
+    const ESTIMATE_CONCURRENCY = 3;
+    const SLIDER_DEBOUNCE_MS = 220;
+    const MODE_DEBOUNCE_MS = 100;
     const ACCEPT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/avif',
         'image/gif', 'image/bmp'];
 
-    // Mode quality presets — only these three keys are valid values for currentMode.
     const MODE_QUALITY = {
         'balanced': 0.80,
         'max-savings': 0.50,
         'max-quality': 0.95,
     };
 
-    let images = [];   // Array of image entry objects
-    let currentMode = 'balanced'; // always one of the MODE_QUALITY keys
-    let currentQ = 0.80;          // source of truth for actual compression quality (0–1)
+    let images = [];
+    let currentMode = 'balanced';
+    let currentQ = 0.80;
+    let estimateGeneration = 0;
+    let estimateDebounceTimer = null;
 
-    /* ========================================================
-    
-    ======================================================== */
     function getEl(id) {
         const el = document.getElementById(id);
         if (!el) throw new Error(`[Compressor] Required DOM element #${id} not found. Check your HTML.`);
         return el;
     }
 
-    /* ========================================================
-       DOM Refs — all via getEl() so a missing element throws
-       a clear error at startup rather than a null crash later.
-    ======================================================== */
     const dropzone = getEl('dropzone');
     const fileInput = getEl('fileInput');
     const listSection = getEl('listSection');
@@ -48,20 +39,16 @@
     const downloadAllBtn = getEl('downloadAllBtn');
     const qualitySlider = getEl('qualitySlider');
     const qualityDisplay = getEl('qualityDisplay');
-    const modeCards = document.querySelectorAll('.mode-card'); // NodeList, not nullable
+    const modeCards = document.querySelectorAll('.mode-card');
     const sumOriginal = getEl('sumOriginal');
     const sumEstimated = getEl('sumEstimated');
     const sumSavings = getEl('sumSavings');
 
-    // How It Works modal
     const howItWorksBtn = getEl('howItWorksBtn');
     const hiwBackdrop = getEl('hiwBackdrop');
     const hiwClose = getEl('hiwClose');
     const hiwGotIt = getEl('hiwGotIt');
 
-    /* ========================================================
-       How It Works — Modal Logic
-    ======================================================== */
     function openHiw() {
         hiwBackdrop.removeAttribute('hidden');
         document.body.style.overflow = 'hidden';
@@ -77,45 +64,34 @@
     hiwClose.addEventListener('click', closeHiw);
     hiwGotIt.addEventListener('click', closeHiw);
 
-    // Close on backdrop click (outside modal card)
     hiwBackdrop.addEventListener('click', e => {
         if (e.target === hiwBackdrop) closeHiw();
     });
 
-    // Close on Escape
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && !hiwBackdrop.hasAttribute('hidden')) closeHiw();
     });
 
-    /* ========================================================
-       Slider — quality
-    ======================================================== */
     qualitySlider.addEventListener('input', () => {
         const val = parseInt(qualitySlider.value, 10);
-        currentQ = val / 100; // currentQ is always the authoritative quality value
+        currentQ = val / 100;
         qualityDisplay.textContent = val + '%';
         updateSliderTrack();
 
-        // Sync the active-card highlight to whichever preset matches the slider value
-        // (if any). currentMode keeps its last explicitly-chosen value and is only
-        // updated here when the slider happens to land on a preset — this avoids ever
-        // setting currentMode to an undefined key like 'custom'.
         let matched = false;
         modeCards.forEach(c => {
             const presetVal = Math.round((MODE_QUALITY[c.dataset.mode] ?? NaN) * 100);
             if (presetVal === val) {
                 c.classList.add('active');
-                currentMode = c.dataset.mode; // slider landed exactly on a known preset
+                currentMode = c.dataset.mode;
                 matched = true;
             } else {
                 c.classList.remove('active');
             }
         });
-        // If no preset matched, leave currentMode unchanged (it still reflects the
-        // last explicitly selected mode) and simply show no card as active.
-        void matched; // suppress unused-variable lints
+        void matched;
 
-        recomputeEstimates();
+        scheduleEstimate(SLIDER_DEBOUNCE_MS);
     });
 
     function updateSliderTrack() {
@@ -126,9 +102,8 @@
         qualitySlider.style.background =
             `linear-gradient(to right, var(--indigo-500) ${pct}%, var(--border) ${pct}%)`;
     }
-    updateSliderTrack(); // init
+    updateSliderTrack();
 
-    // Position slider labels correctly based on their actual value on the track
     function positionSliderLabels() {
         const labelsWrap = document.querySelector('.slider-labels');
         if (!labelsWrap) return;
@@ -143,28 +118,22 @@
     }
     positionSliderLabels();
 
-    /* ========================================================
-       Mode Cards
-    ======================================================== */
     modeCards.forEach(card => {
         card.addEventListener('click', () => {
             modeCards.forEach(c => c.classList.remove('active'));
             card.classList.add('active');
             currentMode = card.dataset.mode;
 
-            // Sync slider to mode preset
             const preset = Math.round(MODE_QUALITY[currentMode] * 100);
             qualitySlider.value = preset;
             currentQ = MODE_QUALITY[currentMode];
             qualityDisplay.textContent = preset + '%';
             updateSliderTrack();
-            recomputeEstimates();
+
+            scheduleEstimate(MODE_DEBOUNCE_MS);
         });
     });
 
-    /* ========================================================
-       Drag & Drop
-    ======================================================== */
     dropzone.addEventListener('dragover', e => {
         e.preventDefault();
         dropzone.classList.add('dragover');
@@ -178,7 +147,6 @@
         addFiles(Array.from(e.dataTransfer.files));
     });
     dropzone.addEventListener('click', e => {
-        // Don't trigger if clicking the label (it already opens the input)
         if (e.target.tagName !== 'LABEL') {
             fileInput.click();
         }
@@ -191,12 +159,9 @@
     });
     fileInput.addEventListener('change', () => {
         addFiles(Array.from(fileInput.files));
-        fileInput.value = ''; // reset so same file can be added again after removal
+        fileInput.value = '';
     });
 
-    /* ========================================================
-       File Ingestion
-    ======================================================== */
     function addFiles(files) {
         const remaining = MAX_FILES - images.length;
         if (remaining <= 0) {
@@ -219,9 +184,6 @@
                 skipped++;
                 return;
             }
-            // FIX (Bug 6): name + size + lastModified is a much stronger duplicate signal.
-            // name+size alone causes false positives (different files, same name/size)
-            // and false negatives (same file renamed to something else).
             const isDupe = images.some(img =>
                 img.file.name === file.name &&
                 img.file.size === file.size &&
@@ -240,7 +202,10 @@
                 height: 0,
                 originalSize: file.size,
                 estimatedSize: 0,
-                status: 'ready',      // ready | compressing | done | error
+                estimating: true,
+                proxyCanvas: null,
+                proxyScaleFactor: 1,
+                status: 'ready',
                 compressedBlob: null,
                 compressedURL: null,
             };
@@ -248,11 +213,9 @@
             images.push(entry);
             added++;
 
-            // Load dimensions asynchronously, then render
-            loadImageDimensions(entry).then(() => {
-                entry.estimatedSize = computeEstimatedSize(entry);
+            loadImageMeta(entry).then(() => {
                 renderTable();
-                updateSummary();
+                scheduleEstimate(0);
             });
         });
 
@@ -270,86 +233,110 @@
         }
     }
 
-    // FIX (Bug 7): onerror now logs a warning instead of silently resolving.
-    // width/height remain 0 and the dimension string is safely omitted from display.
-    function loadImageDimensions(entry) {
+    function loadImageMeta(entry) {
         return new Promise(resolve => {
             const img = new Image();
             img.onload = () => {
                 entry.width = img.naturalWidth;
                 entry.height = img.naturalHeight;
+                buildProxyCanvas(entry, img);
                 resolve();
             };
             img.onerror = () => {
-                console.warn(`Could not load image dimensions for "${entry.file.name}". Width/height will be omitted.`);
-                resolve(); // don't block the pipeline; width/height stay 0
+                console.warn(`Could not load image "${entry.file.name}" for preview or estimation.`);
+                entry.estimating = false;
+                entry.estimatedSize = entry.originalSize;
+                resolve();
             };
             img.src = entry.objectURL;
         });
     }
 
-    /* ========================================================
-       Output MIME resolution
-       FIX (Bug 2): AVIF, GIF, BMP, TIFF fall back to WebP, not JPEG.
-       WebP is smaller than JPEG and supports transparency, making it
-       a strictly better fallback for unsupported input formats.
-    ======================================================== */
+    function buildProxyCanvas(entry, img) {
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        if (!w || !h) return;
+
+        const longest = Math.max(w, h);
+        const scale = longest > PROXY_MAX_DIM ? PROXY_MAX_DIM / longest : 1;
+        const pw = Math.max(1, Math.round(w * scale));
+        const ph = Math.max(1, Math.round(h * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = pw;
+        canvas.height = ph;
+        const ctx = canvas.getContext('2d');
+
+        const mimeOut = resolveOutputMime(entry.file.type);
+        if (mimeOut === 'image/jpeg') {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, pw, ph);
+        }
+        ctx.drawImage(img, 0, 0, pw, ph);
+
+        entry.proxyCanvas = canvas;
+        entry.proxyScaleFactor = (w * h) / (pw * ph);
+    }
+
     function resolveOutputMime(inputType) {
         switch (inputType) {
-            case 'image/png': return 'image/png';   // lossless + transparency preserved
+            case 'image/png': return 'image/png';
             case 'image/jpeg': return 'image/jpeg';
             case 'image/webp': return 'image/webp';
-            default: return 'image/webp';  // AVIF, GIF, BMP, TIFF → WebP
+            default: return 'image/webp';
         }
     }
 
-    /* ========================================================
-       
-    ======================================================== */
-    function computeEstimatedSize(entry) {
-        const originalSize = entry.originalSize;
-        const mimeOut = resolveOutputMime(entry.file.type);
-        const q = currentQ; // 0–1; authoritative quality used by compressOne()
-
-        let ratio;
-        if (mimeOut === 'image/png') {
-            // PNG output is always lossless — quality param is ignored by toBlob().
-            // Canvas typically re-encodes at ~90–95% of a well-optimised source;
-            // use a fixed constant rather than a misleading quality-dependent formula.
-            ratio = 0.92;
-        } else if (mimeOut === 'image/jpeg') {
-            // Empirically: size ≈ 8% overhead floor + 82% quality-proportional body.
-            ratio = 0.08 + q * 0.82;
-        } else if (mimeOut === 'image/webp') {
-            if (entry.file.type === 'image/png') {
-                // Lossless PNG → lossy WebP: large savings are typical.
-                ratio = 0.04 + q * 0.50;
-            } else {
-                // WebP → WebP or other lossy → WebP re-encode.
-                ratio = 0.04 + q * 0.72;
-            }
-        } else {
-            ratio = 0.05 + q * 0.75;
-        }
-
-        // Cap at 0.99: we never claim the output will be larger than the original.
-        ratio = Math.min(ratio, 0.99);
-        return Math.max(Math.round(originalSize * ratio), 512); // floor at 512 B
-    }
-
-    function recomputeEstimates() {
-        images.forEach(entry => {
-            if (entry.status !== 'done') {
-                entry.estimatedSize = computeEstimatedSize(entry);
-            }
+    function estimateEntrySize(entry, quality) {
+        return new Promise(resolve => {
+            if (!entry.proxyCanvas) { resolve(entry.originalSize); return; }
+            const mimeOut = resolveOutputMime(entry.file.type);
+            entry.proxyCanvas.toBlob(blob => {
+                if (!blob) { resolve(entry.originalSize); return; }
+                const scaled = Math.round(blob.size * entry.proxyScaleFactor);
+                resolve(Math.max(scaled, 512));
+            }, mimeOut, mimeOut === 'image/png' ? undefined : quality);
         });
-        renderTable();
-        updateSummary();
     }
 
-    /* ========================================================
-       Render Table
-    ======================================================== */
+    function scheduleEstimate(delay) {
+        if (estimateDebounceTimer) clearTimeout(estimateDebounceTimer);
+        estimateDebounceTimer = setTimeout(() => {
+            estimateGeneration++;
+            runEstimatePass(estimateGeneration);
+        }, delay);
+    }
+
+    function runEstimatePass(generation) {
+        const targets = images.filter(e =>
+            e.status !== 'done' && e.status !== 'compressing' && e.proxyCanvas
+        );
+        if (targets.length === 0) return;
+
+        const quality = currentQ;
+        let cursor = 0;
+
+        async function worker() {
+            while (cursor < targets.length) {
+                if (generation !== estimateGeneration) return;
+                const entry = targets[cursor++];
+                entry.estimating = true;
+                renderTable();
+
+                const size = await estimateEntrySize(entry, quality);
+
+                if (generation !== estimateGeneration) return;
+                entry.estimating = false;
+                entry.estimatedSize = size;
+                renderTable();
+                updateSummary();
+            }
+        }
+
+        const workerCount = Math.min(ESTIMATE_CONCURRENCY, targets.length);
+        for (let i = 0; i < workerCount; i++) worker();
+    }
+
     function renderTable() {
         imageCountHead.textContent = `Added Images (${images.length})`;
 
@@ -362,6 +349,7 @@
 
         images.forEach(entry => {
             const isDone = entry.status === 'done' && entry.compressedBlob;
+            const hasEstimate = isDone || entry.estimatedSize > 0;
             const displaySize = isDone ? entry.compressedBlob.size : entry.estimatedSize;
             const savingBytes = entry.originalSize - displaySize;
             const savingPct = entry.originalSize > 0
@@ -370,7 +358,6 @@
 
             const tr = document.createElement('tr');
 
-            // Preview
             const tdPrev = document.createElement('td');
             tdPrev.className = 'col-preview';
             const img = document.createElement('img');
@@ -381,7 +368,6 @@
             tdPrev.appendChild(img);
             tr.appendChild(tdPrev);
 
-            // File name
             const tdName = document.createElement('td');
             tdName.className = 'col-name';
             const nameWrap = document.createElement('div');
@@ -396,25 +382,30 @@
             tdName.appendChild(nameWrap);
             tr.appendChild(tdName);
 
-            // Original Size
             const tdOrig = document.createElement('td');
             tdOrig.className = 'col-orig';
             tdOrig.textContent = formatSize(entry.originalSize);
             tr.appendChild(tdOrig);
 
-            // Estimated / Actual Size
             const tdEst = document.createElement('td');
             tdEst.className = 'col-est';
-            tdEst.textContent = formatSize(displaySize);
+            if (!hasEstimate) {
+                tdEst.textContent = 'Estimating…';
+            } else if (entry.estimating && !isDone) {
+                tdEst.textContent = `${formatSize(displaySize)} …`;
+            } else {
+                tdEst.textContent = formatSize(displaySize);
+            }
             tr.appendChild(tdEst);
 
-            // Savings — handle edge case where compressed > original
             const tdSave = document.createElement('td');
             tdSave.className = 'col-save';
             const savingSpan = document.createElement('span');
             savingSpan.className = 'savings-badge';
-            if (savingPct < 0) {
-                // Output is larger than input (can happen with already-optimised PNGs)
+            if (!hasEstimate) {
+                savingSpan.textContent = '—';
+                savingSpan.style.opacity = '0.55';
+            } else if (savingPct < 0) {
                 savingSpan.textContent = `+${formatSize(-savingBytes)} (larger)`;
                 savingSpan.style.opacity = '0.55';
             } else {
@@ -423,7 +414,6 @@
             tdSave.appendChild(savingSpan);
             tr.appendChild(tdSave);
 
-            // Status
             const tdStatus = document.createElement('td');
             tdStatus.className = 'col-status';
             const statusCell = document.createElement('div');
@@ -438,7 +428,6 @@
             tdStatus.appendChild(statusCell);
             tr.appendChild(tdStatus);
 
-            // Actions
             const tdAct = document.createElement('td');
             tdAct.className = 'col-actions';
             const actionsWrap = document.createElement('div');
@@ -466,16 +455,12 @@
             imageTableBody.appendChild(tr);
         });
 
-        // Enable/disable buttons
         const anyDone = images.some(img => img.status === 'done');
         const anyReady = images.some(img => img.status === 'ready' || img.status === 'error');
         compressBtn.disabled = images.length === 0 || !anyReady;
         downloadAllBtn.disabled = !anyDone;
     }
 
-    /* ========================================================
-       Summary Panel
-    ======================================================== */
     function updateSummary() {
         if (images.length === 0) { return; }
 
@@ -493,16 +478,12 @@
         sumEstimated.textContent = formatSize(totalEst);
         sumSavings.textContent = `${formatSize(savings)} (${savingsPct}%)`;
 
-        // Flip the label when all results are real measurements, not estimates
         const estLabel = sumEstimated.previousElementSibling;
         if (estLabel) {
             estLabel.textContent = allDone ? 'Actual Total Size' : 'Estimated Total Size';
         }
     }
 
-    /* ========================================================
-       Remove / Clear
-    ======================================================== */
     function removeEntry(id) {
         const idx = images.findIndex(e => e.id === id);
         if (idx === -1) return;
@@ -527,14 +508,14 @@
         listSection.setAttribute('hidden', '');
     });
 
-    /* ========================================================
-       Compression
-    ======================================================== */
     compressBtn.addEventListener('click', compressAll);
 
     async function compressAll() {
         const toCompress = images.filter(e => e.status === 'ready' || e.status === 'error');
         if (toCompress.length === 0) return;
+
+        if (estimateDebounceTimer) clearTimeout(estimateDebounceTimer);
+        estimateGeneration++;
 
         compressBtn.disabled = true;
         compressBtn.classList.add('compressing');
@@ -552,7 +533,6 @@
                 console.error('Compression failed for', entry.file.name, err);
                 entry.status = 'error';
                 hadError = true;
-                // FIX (Bug 4): Surface per-file failures with a descriptive toast
                 showToast(`Could not compress "${entry.file.name}". ${err.message || ''}`, 'error');
             }
             renderTable();
@@ -562,8 +542,6 @@
         compressBtn.classList.remove('compressing');
         compressBtn.innerHTML = '<i class="fa-solid fa-bolt"></i> Compress Images';
 
-        // FIX (Bug 5): renderTable() is the single source of truth for button state.
-        // No need to duplicate anyReady/anyDone checks here.
         renderTable();
 
         if (!hadError) showToast('Compression complete!', 'success');
@@ -576,7 +554,6 @@
                 let outW = img.naturalWidth;
                 let outH = img.naturalHeight;
 
-                // Scale down if either dimension exceeds the safe limit
                 if (outW > MAX_DIMENSION || outH > MAX_DIMENSION) {
                     const scale = Math.min(MAX_DIMENSION / outW, MAX_DIMENSION / outH);
                     outW = Math.round(outW * scale);
@@ -588,12 +565,8 @@
                 canvas.height = outH;
                 const ctx = canvas.getContext('2d');
 
-                // FIX (Bug 2): Use resolveOutputMime so AVIF/GIF/BMP/TIFF → WebP, not JPEG
                 const mimeOut = resolveOutputMime(entry.file.type);
 
-                // FIX (Bug 2): Pre-fill with white only when converting to JPEG.
-                // JPEG has no alpha channel; unfilled pixels would render as black.
-                // WebP and PNG both handle transparency natively.
                 if (mimeOut === 'image/jpeg') {
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -601,9 +574,6 @@
 
                 ctx.drawImage(img, 0, 0, outW, outH);
 
-                // FIX (Bug 3): Use currentQ directly — no extra mode multiplier.
-                // The mode card click already updated the slider and currentQ to the
-                // mode preset, so applying another multiplier here would double-adjust.
                 const q = currentQ;
 
                 canvas.toBlob(blob => {
@@ -614,21 +584,15 @@
                     resolve();
                 }, mimeOut, mimeOut === 'image/png' ? undefined : q);
             };
-            // FIX (Bug 4): Provide a meaningful rejection message for the per-file error toast
             img.onerror = () => reject(new Error('Image could not be loaded for compression.'));
             img.src = entry.objectURL;
         });
     }
 
-    /* ========================================================
-       Download
-    ======================================================== */
     function downloadSingle(entry) {
         if (!entry.compressedURL) return;
         const a = document.createElement('a');
         a.href = entry.compressedURL;
-        // FIX (Bug 2): Use the actual output MIME type so the file extension is correct
-        // (e.g. photo.avif compressed to WebP downloads as photo-compressed.webp)
         const outMime = entry.compressedBlob ? entry.compressedBlob.type : null;
         a.download = compressedFilename(entry.file.name, outMime);
         document.body.appendChild(a);
@@ -645,17 +609,15 @@
             return;
         }
 
-        // Sequential download (no external dependency)
         downloadAllBtn.disabled = true;
         for (const entry of done) {
             downloadSingle(entry);
-            await sleep(200); // slight delay so browser doesn't block multiple downloads
+            await sleep(200);
         }
         downloadAllBtn.disabled = false;
         showToast(`${done.length} images downloaded!`, 'success');
     });
 
-    // FIX (Bug 2): Accept actual output MIME to set the correct file extension
     function compressedFilename(original, mimeOut) {
         const extMap = {
             'image/jpeg': '.jpg',
@@ -664,14 +626,10 @@
         };
         const lastDot = original.lastIndexOf('.');
         const base = lastDot > 0 ? original.slice(0, lastDot) : original;
-        // Fall back to original extension if mimeOut is unknown/null
         const newExt = extMap[mimeOut] || (lastDot > 0 ? original.slice(lastDot) : '');
         return `${base}-compressed${newExt}`;
     }
 
-    /* ========================================================
-       Utilities
-    ======================================================== */
     function formatSize(bytes) {
         if (bytes === 0) return '0 B';
         if (bytes < 1024) return `${bytes} B`;
@@ -692,13 +650,9 @@
         return new Promise(res => setTimeout(res, ms));
     }
 
-    /* ========================================================
-       Toast
-    ======================================================== */
     let toastTimer = null;
 
     function showToast(message, type = 'info') {
-        // Remove existing toast
         const existing = document.querySelector('.toast');
         if (existing) existing.remove();
         if (toastTimer) clearTimeout(toastTimer);
@@ -724,3 +678,4 @@
     }
 
 })();
+
