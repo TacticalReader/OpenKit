@@ -173,7 +173,7 @@ Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more informa
 
 <div align="center">
 
-**Built as a front-end UI recreation — © 2026 OpenKit**
+**Built as a front-end UI Kit — © 2026 OpenKit**
 
 If this project helped you, consider giving it a ⭐!
 

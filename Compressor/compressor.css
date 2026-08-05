@@ -125,6 +125,12 @@
     outline-offset: 2px;
 }
 
+.dropzone.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+    cursor: default;
+}
+
 .dz-inner {
     display: flex;
     flex-direction: column;

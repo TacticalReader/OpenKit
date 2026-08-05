@@ -1,0 +1,77 @@
+I reviewed the three `Compressor` files from the latest `main` commit, [`0fcbe0c`](https://github.com/TacticalReader/OpenKit/commit/0fcbe0cc9a97e35646cf8ea860a7e099914525fc), dated July 24, 2026. I made no changes.
+
+## Important bugs
+
+1. **Mobile layout is broken — High**
+
+   `compressor.css` contains no responsive media queries. The main section remains `1fr 480px`, the results remain two columns, and the feature strip remains four columns. This will create horizontal overflow on phones.
+
+   Evidence: [tool grid](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.css#L92-L97), [results grid](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.css#L358-L363), [feature grid](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.css#L815-L819).
+
+2. **Large images are silently resized — High**
+
+   Any image wider or taller than 4096px is reduced to 4096px. The interface presents this as compression, not resizing, and never warns the user that resolution will be lost.
+
+   Evidence: [compressor.js lines 573–602](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L573-L602).
+
+3. **Clear/remove during compression causes race conditions and leaks — High**
+
+   The delete and Clear All buttons remain usable while compression runs. `compressAll()` keeps references to the removed entries, so it may:
+
+   * Continue compressing files that are no longer displayed.
+   * Fail because their source URLs were revoked.
+   * Create compressed object URLs for removed entries that are never revoked.
+   * Show “Compression complete” after the user cleared everything.
+
+   Evidence: [remove and clear logic](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L506-L528), [captured compression list](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L535-L565).
+
+4. **Filename-based HTML injection — Medium/High**
+
+   Compression errors include the filename in a toast message. `showToast()` inserts that message using `innerHTML`. A specially named invalid image can inject HTML—and potentially JavaScript—into the page on operating systems that permit HTML characters in filenames.
+
+   Evidence: [filename passed to toast](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L549-L553), [`innerHTML` sink](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L700-L716).
+
+5. **The 4096px cap does not actually prevent image-decoding OOM — Medium/High**
+
+   The original image must be fully decoded into an `Image` before its dimensions are capped. A highly compressed file under 10MB can still have enormous pixel dimensions and crash or freeze the tab during decoding. Images are also decoded once for dimension detection and again for compression.
+
+   Evidence: [initial dimension decode](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L275-L288), [second decode before resizing](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L572-L586).
+
+6. **Animated GIFs lose their animation — Medium/High**
+
+   GIF is advertised as supported, but the file is drawn onto a canvas and exported as WebP. This captures only a single frame, silently turning an animated GIF into a static image.
+
+   Evidence: [GIF advertised](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.html#L60-L67), [fallback and canvas export](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L295-L305).
+
+7. **Quality controls do nothing for PNG files — Medium**
+
+   PNG is exported losslessly, and the code deliberately omits the quality parameter. Therefore Balanced, Maximum Savings, Maximum Quality and the 1–100% slider all produce essentially the same PNG output. The UI nevertheless says the slider controls the size–quality trade-off.
+
+   Evidence: [fixed PNG estimate](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L309-L335), [PNG export](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L610-L618), [UI claim](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.html#L234-L239).
+
+8. **Changing quality during a batch produces inconsistent results — Medium**
+
+   The controls remain active while compression runs, and `currentQ` is read separately for each image. Changing the slider halfway through means earlier and later images in the same batch use different quality values.
+
+   Evidence: [sequential loop](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L535-L565), [quality read per image](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L607-L618).
+
+9. **Estimates ignore the automatic resizing — Medium**
+
+   Estimated size uses only original bytes, format and quality. It does not consider that a 9000px image will be resized to 4096px, making the estimate potentially wildly inaccurate.
+
+   Evidence: [estimation formula](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L309-L348).
+
+10. **Some canvas failures can leave compression stuck forever — Medium**
+
+    `getContext('2d')` is not checked for `null`, and exceptions inside `img.onload` are not converted into Promise rejections. Under memory/canvas failure, `compressOne()` can remain pending and the button can stay on “Compressing…” indefinitely.
+
+    Evidence: [canvas creation and unchecked context](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L586-L603).
+
+## Smaller issues
+
+* “Download All” launches separate downloads with delays. Browsers may block later downloads because they no longer belong directly to the original user gesture. [Download loop](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.js#L639-L655).
+* The two question-mark info buttons have no click handlers and do nothing. [HTML controls](https://github.com/TacticalReader/OpenKit/blob/0fcbe0cc9a97e35646cf8ea860a7e099914525fc/Compressor/compressor.html#L74-L106).
+* Invalid image data can be accepted based only on MIME type, shown as “Ready” with a fake estimate, and fail only after Compress is clicked.
+* “Works Offline” is not fully true on the first visit because Google Fonts and Font Awesome are loaded from external CDNs.
+
+The first four I would treat as the most urgent: mobile responsiveness, silent resolution loss, compression/removal races, and unsafe toast rendering.

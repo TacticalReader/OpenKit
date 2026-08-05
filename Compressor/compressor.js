@@ -22,6 +22,7 @@
     let currentQ = 0.80;
     let estimateGeneration = 0;
     let estimateDebounceTimer = null;
+    let isCompressing = false;
 
     function getEl(id) {
         const el = document.getElementById(id);
@@ -163,6 +164,7 @@
     });
 
     function addFiles(files) {
+        if (isCompressing) return;
         const remaining = MAX_FILES - images.length;
         if (remaining <= 0) {
             showToast(`Maximum ${MAX_FILES} images allowed.`, 'error');
@@ -446,6 +448,7 @@
             delBtn.className = 'del-btn';
             delBtn.title = 'Remove image';
             delBtn.innerHTML = '<i class="fa-regular fa-trash-can"></i>';
+            delBtn.disabled = isCompressing;
             delBtn.addEventListener('click', () => removeEntry(entry.id));
             actionsWrap.appendChild(delBtn);
 
@@ -457,8 +460,9 @@
 
         const anyDone = images.some(img => img.status === 'done');
         const anyReady = images.some(img => img.status === 'ready' || img.status === 'error');
-        compressBtn.disabled = images.length === 0 || !anyReady;
+        compressBtn.disabled = isCompressing || images.length === 0 || !anyReady;
         downloadAllBtn.disabled = !anyDone;
+        clearAllBtn.disabled = isCompressing;
     }
 
     function updateSummary() {
@@ -485,6 +489,7 @@
     }
 
     function removeEntry(id) {
+        if (isCompressing) return;
         const idx = images.findIndex(e => e.id === id);
         if (idx === -1) return;
         const entry = images[idx];
@@ -499,6 +504,7 @@
     }
 
     clearAllBtn.addEventListener('click', () => {
+        if (isCompressing) return;
         images.forEach(e => {
             URL.revokeObjectURL(e.objectURL);
             if (e.compressedURL) URL.revokeObjectURL(e.compressedURL);
@@ -517,32 +523,43 @@
         if (estimateDebounceTimer) clearTimeout(estimateDebounceTimer);
         estimateGeneration++;
 
+        isCompressing = true;
         compressBtn.disabled = true;
         compressBtn.classList.add('compressing');
         compressBtn.innerHTML = '<i class="fa-solid fa-spinner"></i> Compressing…';
+        clearAllBtn.disabled = true;
+        dropzone.classList.add('disabled');
+        fileInput.disabled = true;
 
         let hadError = false;
 
-        for (const entry of toCompress) {
-            entry.status = 'compressing';
-            renderTable();
-            try {
-                await compressOne(entry);
-                entry.status = 'done';
-            } catch (err) {
-                console.error('Compression failed for', entry.file.name, err);
-                entry.status = 'error';
-                hadError = true;
-                showToast(`Could not compress "${entry.file.name}". ${err.message || ''}`, 'error');
+        try {
+            for (const entry of toCompress) {
+                if (!images.includes(entry)) continue;
+                entry.status = 'compressing';
+                renderTable();
+                try {
+                    await compressOne(entry);
+                    entry.status = 'done';
+                } catch (err) {
+                    console.error('Compression failed for', entry.file.name, err);
+                    entry.status = 'error';
+                    hadError = true;
+                    showToast(`Could not compress "${entry.file.name}". ${err.message || ''}`, 'error');
+                }
+                renderTable();
+                updateSummary();
             }
+        } finally {
+            isCompressing = false;
+            compressBtn.classList.remove('compressing');
+            compressBtn.innerHTML = '<i class="fa-solid fa-bolt"></i> Compress Images';
+            clearAllBtn.disabled = false;
+            dropzone.classList.remove('disabled');
+            fileInput.disabled = false;
+
             renderTable();
-            updateSummary();
         }
-
-        compressBtn.classList.remove('compressing');
-        compressBtn.innerHTML = '<i class="fa-solid fa-bolt"></i> Compress Images';
-
-        renderTable();
 
         if (!hadError) showToast('Compression complete!', 'success');
     }
