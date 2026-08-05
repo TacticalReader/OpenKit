@@ -1323,3 +1323,626 @@ footer.site-footer .footer-inner {
     transform: translateY(-1px);
     box-shadow: 0 12px 22px -6px rgba(79, 70, 229, .65);
 }
+
+/* ============================================================
+   Responsive — Tablet (≤ 1024px)
+   ============================================================ */
+@media (max-width: 1024px) {
+
+    /* Reduce container side padding */
+    .container {
+        padding: 0 28px;
+    }
+
+    /* Stack the tool grid (dropzone + controls) */
+    .tool-grid {
+        grid-template-columns: 1fr;
+        gap: 22px;
+    }
+
+    /* Stack the list grid (table + summary) */
+    .list-grid {
+        grid-template-columns: 1fr;
+        gap: 22px;
+    }
+
+    /* Feature strip: 2 columns instead of 4 */
+    .fs-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 22px;
+    }
+
+    /* Footer: stack vertically */
+    footer.site-footer .footer-inner {
+        padding: 24px 28px;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .footer-links {
+        gap: 20px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
+
+/* ============================================================
+   Responsive — Mobile (≤ 768px)
+   ============================================================ */
+@media (max-width: 768px) {
+
+    /* Tighter container padding */
+    .container {
+        padding: 0 18px;
+    }
+
+    /* ---- Title Bar ---- */
+    .tool-title-bar {
+        padding: 20px 0;
+    }
+
+    .ttb-inner {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 14px;
+    }
+
+    .ttb-heading {
+        font-size: 20px;
+    }
+
+    .ttb-sub {
+        font-size: 13px;
+    }
+
+    .how-it-works-btn {
+        align-self: flex-start;
+    }
+
+    /* ---- Tool Section ---- */
+    .tool-section {
+        padding: 22px 0 16px;
+    }
+
+    /* ---- Dropzone ---- */
+    .dropzone-wrap {
+        min-height: 180px;
+    }
+
+    .dropzone {
+        min-height: 180px;
+    }
+
+    .dz-inner {
+        padding: 28px 18px;
+    }
+
+    .dz-icon {
+        font-size: 28px;
+        width: 48px;
+        height: 48px;
+    }
+
+    .dz-heading {
+        font-size: 15px;
+    }
+
+    .dz-formats {
+        font-size: 11.5px;
+    }
+
+    /* ---- Controls Panel ---- */
+    .cp-block {
+        padding: 16px 18px;
+    }
+
+    /* Mode cards: keep 3 columns but smaller */
+    .mode-card {
+        padding: 12px 8px;
+    }
+
+    .mode-card i {
+        font-size: 18px;
+    }
+
+    .mode-card strong {
+        font-size: 12px;
+    }
+
+    .mode-card span {
+        font-size: 10.5px;
+    }
+
+    /* ---- Image Table ---- */
+    .image-table-header {
+        padding: 14px 16px 12px;
+    }
+
+    .it-heading {
+        font-size: 14px;
+    }
+
+    .clear-all-btn {
+        font-size: 11.5px;
+        padding: 6px 10px;
+    }
+
+    .it-table {
+        min-width: 580px;
+    }
+
+    .it-table th {
+        padding: 9px 10px;
+        font-size: 11px;
+    }
+
+    .it-table td {
+        padding: 10px 10px;
+        font-size: 12.5px;
+    }
+
+    .img-thumb {
+        width: 42px;
+        height: 34px;
+        border-radius: 6px;
+    }
+
+    .col-preview {
+        width: 56px;
+    }
+
+    /* ---- Summary Panel ---- */
+    .summary-panel {
+        padding: 18px;
+    }
+
+    .summary-title {
+        font-size: 14px;
+        margin-bottom: 14px;
+    }
+
+    /* ---- CTA Buttons ---- */
+    .btn-compress {
+        height: 44px;
+        font-size: 14px;
+        border-radius: 10px;
+    }
+
+    .btn-download-all {
+        height: 40px;
+        font-size: 13px;
+        border-radius: 10px;
+    }
+
+    /* ---- Feature Strip ---- */
+    .feature-strip {
+        padding: 32px 0;
+    }
+
+    .fs-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+        border-radius: 10px;
+    }
+
+    .fs-text strong {
+        font-size: 13.5px;
+    }
+
+    .fs-text span {
+        font-size: 12px;
+    }
+
+    /* ---- Modal ---- */
+    .hiw-modal {
+        max-width: 100%;
+        border-radius: 16px;
+    }
+
+    .hiw-backdrop {
+        padding: 14px;
+    }
+
+    .hiw-header {
+        padding: 18px 20px 14px;
+        border-radius: 16px 16px 0 0;
+    }
+
+    .hiw-title {
+        font-size: 16px;
+    }
+
+    .hiw-steps {
+        padding: 18px 20px 8px;
+    }
+
+    .hiw-formats {
+        margin: 14px 20px 0;
+    }
+
+    .hiw-privacy {
+        margin: 14px 20px 0;
+    }
+
+    .hiw-footer {
+        padding: 16px 20px 20px;
+    }
+
+    /* ---- Toast ---- */
+    .toast {
+        left: 18px;
+        right: 18px;
+        bottom: 18px;
+        max-width: none;
+    }
+
+    /* ---- Footer ---- */
+    footer.site-footer .footer-inner {
+        padding: 22px 18px;
+        gap: 14px;
+    }
+
+    .footer-links {
+        gap: 16px;
+    }
+
+    .footer-links a {
+        font-size: 12.5px;
+    }
+
+    .footer-copy {
+        font-size: 12.5px;
+    }
+}
+
+/* ============================================================
+   Responsive — Small Mobile (≤ 480px)
+   ============================================================ */
+@media (max-width: 480px) {
+
+    /* Minimal container padding */
+    .container {
+        padding: 0 14px;
+    }
+
+    /* ---- Title Bar ---- */
+    .tool-title-bar {
+        padding: 16px 0;
+    }
+
+    .tool-icon-wrap {
+        width: 40px;
+        height: 40px;
+        font-size: 17px;
+        border-radius: 11px;
+    }
+
+    .ttb-heading {
+        font-size: 18px;
+    }
+
+    .ttb-sub {
+        font-size: 12px;
+    }
+
+    .how-it-works-btn {
+        font-size: 12.5px;
+        padding: 8px 12px;
+    }
+
+    /* ---- Dropzone ---- */
+    .dropzone-wrap {
+        min-height: 160px;
+    }
+
+    .dropzone {
+        min-height: 160px;
+    }
+
+    .dz-inner {
+        padding: 22px 14px;
+        gap: 4px;
+    }
+
+    .dz-icon {
+        font-size: 24px;
+        width: 42px;
+        height: 42px;
+        margin-bottom: 6px;
+    }
+
+    .dz-heading {
+        font-size: 14px;
+    }
+
+    .dz-browse {
+        font-size: 13.5px;
+    }
+
+    .dz-formats {
+        font-size: 11px;
+    }
+
+    /* ---- Mode Cards: stack to 1 column ---- */
+    .mode-cards {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .mode-card {
+        flex-direction: row;
+        align-items: center;
+        text-align: left;
+        padding: 12px 14px;
+        gap: 12px;
+    }
+
+    .mode-card i {
+        font-size: 18px;
+        margin-bottom: 0;
+    }
+
+    .mode-card strong {
+        font-size: 13px;
+    }
+
+    .mode-card span {
+        font-size: 11px;
+    }
+
+    /* ---- Controls Panel ---- */
+    .cp-block {
+        padding: 14px 14px;
+    }
+
+    .cp-label {
+        font-size: 13px;
+    }
+
+    .quality-display {
+        font-size: 13px;
+    }
+
+    /* ---- Image Table ---- */
+    .image-table-header {
+        padding: 12px 14px 10px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .it-heading {
+        font-size: 13.5px;
+    }
+
+    .it-table {
+        min-width: 520px;
+    }
+
+    .it-table th {
+        padding: 8px 8px;
+        font-size: 10.5px;
+    }
+
+    .it-table td {
+        padding: 8px 8px;
+        font-size: 12px;
+    }
+
+    .img-thumb {
+        width: 36px;
+        height: 30px;
+        border-radius: 5px;
+    }
+
+    .col-preview {
+        width: 48px;
+    }
+
+    .col-name {
+        min-width: 140px;
+    }
+
+    .file-name-cell strong {
+        font-size: 12px;
+    }
+
+    .file-name-cell span {
+        font-size: 10.5px;
+    }
+
+    .savings-badge {
+        font-size: 11.5px;
+    }
+
+    .del-btn,
+    .dl-row-btn {
+        width: 30px;
+        height: 30px;
+        font-size: 12px;
+        border-radius: 7px;
+    }
+
+    /* ---- Summary Panel ---- */
+    .summary-panel {
+        padding: 16px 14px;
+    }
+
+    .summary-title {
+        font-size: 13.5px;
+        margin-bottom: 12px;
+    }
+
+    .summary-row {
+        padding: 10px 12px;
+    }
+
+    .sr-label {
+        font-size: 12px;
+    }
+
+    .sr-value {
+        font-size: 12.5px;
+    }
+
+    .savings-value {
+        font-size: 13.5px;
+    }
+
+    .privacy-note {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+
+    .privacy-note p {
+        font-size: 11.5px;
+    }
+
+    /* ---- CTA Buttons ---- */
+    .btn-compress {
+        height: 42px;
+        font-size: 13.5px;
+    }
+
+    .btn-download-all {
+        height: 38px;
+        font-size: 12.5px;
+    }
+
+    /* ---- Feature Strip: single column ---- */
+    .fs-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .feature-strip {
+        padding: 28px 0;
+    }
+
+    /* ---- Modal ---- */
+    .hiw-backdrop {
+        padding: 8px;
+        align-items: flex-end;
+    }
+
+    .hiw-modal {
+        max-height: 92vh;
+        border-radius: 18px 18px 0 0;
+    }
+
+    .hiw-header {
+        padding: 16px 16px 12px;
+        border-radius: 18px 18px 0 0;
+        gap: 10px;
+    }
+
+    .hiw-header-left {
+        gap: 10px;
+    }
+
+    .hiw-icon-wrap {
+        width: 36px;
+        height: 36px;
+        font-size: 15px;
+        border-radius: 10px;
+    }
+
+    .hiw-title {
+        font-size: 15px;
+    }
+
+    .hiw-subtitle {
+        font-size: 12px;
+    }
+
+    .hiw-steps {
+        padding: 14px 16px 6px;
+        gap: 14px;
+    }
+
+    .hiw-step {
+        gap: 12px;
+    }
+
+    .hiw-step-num {
+        width: 26px;
+        height: 26px;
+        font-size: 11.5px;
+    }
+
+    .hiw-step-body strong {
+        font-size: 13px;
+    }
+
+    .hiw-step-body span {
+        font-size: 12.5px;
+    }
+
+    .hiw-formats {
+        margin: 12px 16px 0;
+    }
+
+    .hiw-format-row {
+        grid-template-columns: 70px 1fr 80px;
+        padding: 8px 12px;
+        font-size: 12px;
+        gap: 6px;
+    }
+
+    .hiw-privacy {
+        margin: 12px 16px 0;
+        padding: 12px 14px;
+        gap: 10px;
+    }
+
+    .hiw-privacy > i {
+        font-size: 17px;
+    }
+
+    .hiw-privacy strong {
+        font-size: 12.5px;
+    }
+
+    .hiw-privacy span {
+        font-size: 12px;
+    }
+
+    .hiw-footer {
+        padding: 14px 16px 18px;
+    }
+
+    .hiw-got-it {
+        width: 100%;
+        justify-content: center;
+        height: 42px;
+        font-size: 13.5px;
+        border-radius: 10px;
+    }
+
+    /* ---- Toast ---- */
+    .toast {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        font-size: 13px;
+        padding: 11px 16px;
+        border-radius: 10px;
+    }
+
+    /* ---- Footer ---- */
+    footer.site-footer .footer-inner {
+        padding: 18px 14px;
+        gap: 12px;
+    }
+
+    .footer-links a {
+        font-size: 12px;
+    }
+
+    .footer-social a {
+        width: 30px;
+        height: 30px;
+        font-size: 13px;
+    }
+}
