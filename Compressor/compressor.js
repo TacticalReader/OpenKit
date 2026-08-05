@@ -618,7 +618,7 @@
     }
 
     downloadAllBtn.addEventListener('click', async () => {
-        const done = images.filter(e => e.status === 'done' && e.compressedURL);
+        const done = images.filter(e => e.status === 'done' && e.compressedBlob);
         if (done.length === 0) return;
 
         if (done.length === 1) {
@@ -626,13 +626,71 @@
             return;
         }
 
-        downloadAllBtn.disabled = true;
-        for (const entry of done) {
-            downloadSingle(entry);
-            await sleep(200);
+        // Use JSZip if available, otherwise fall back to sequential downloads
+        if (typeof JSZip === 'undefined') {
+            downloadAllBtn.disabled = true;
+            for (const entry of done) {
+                downloadSingle(entry);
+                await sleep(200);
+            }
+            downloadAllBtn.disabled = false;
+            showToast(`${done.length} images downloaded!`, 'success');
+            return;
         }
-        downloadAllBtn.disabled = false;
-        showToast(`${done.length} images downloaded!`, 'success');
+
+        downloadAllBtn.disabled = true;
+        const originalHTML = downloadAllBtn.innerHTML;
+        downloadAllBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Zipping… 0%';
+
+        try {
+            const zip = new JSZip();
+            const usedNames = new Set();
+
+            for (const entry of done) {
+                const outMime = entry.compressedBlob ? entry.compressedBlob.type : null;
+                let name = compressedFilename(entry.file.name, outMime);
+
+                // Avoid duplicate filenames inside the zip
+                if (usedNames.has(name)) {
+                    const lastDot = name.lastIndexOf('.');
+                    const base = lastDot > 0 ? name.slice(0, lastDot) : name;
+                    const ext = lastDot > 0 ? name.slice(lastDot) : '';
+                    let counter = 2;
+                    while (usedNames.has(`${base} (${counter})${ext}`)) counter++;
+                    name = `${base} (${counter})${ext}`;
+                }
+                usedNames.add(name);
+
+                zip.file(name, entry.compressedBlob);
+            }
+
+            const zipBlob = await zip.generateAsync({ type: 'blob' }, metadata => {
+                const pct = Math.round(metadata.percent);
+                downloadAllBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Zipping… ${pct}%`;
+            });
+
+            // Trigger single ZIP download
+            const zipURL = URL.createObjectURL(zipBlob);
+            const a = document.createElement('a');
+            a.href = zipURL;
+            a.download = 'compressed-images.zip';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(zipURL);
+
+            showToast(`${done.length} images downloaded as ZIP!`, 'success');
+        } catch (err) {
+            console.error('ZIP creation failed:', err);
+            showToast('ZIP creation failed. Downloading individually…', 'error');
+            for (const entry of done) {
+                downloadSingle(entry);
+                await sleep(200);
+            }
+        } finally {
+            downloadAllBtn.innerHTML = originalHTML;
+            downloadAllBtn.disabled = false;
+        }
     });
 
     function compressedFilename(original, mimeOut) {
